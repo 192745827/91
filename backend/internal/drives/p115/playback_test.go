@@ -163,12 +163,12 @@ func TestPlaybackReadRetriesAreBoundedAndPreserveRejections(t *testing.T) {
 					t.Fatalf("calls=%d want=%d err=%v", calls, wantCalls, err)
 				}
 				for i := 1; i < len(attempts); i++ {
-					minimum := time.Second
-					if i == 2 {
-						minimum = 3 * time.Second
+					delay := attempts[i].Sub(attempts[i-1])
+					if i == 1 && delay >= time.Second {
+						t.Errorf("first retry was not immediate: %s", delay)
 					}
-					if attempts[i].Sub(attempts[i-1]) < minimum {
-						t.Errorf("retry %d had no backoff", i)
+					if i == 2 && delay < time.Second {
+						t.Errorf("last retry waited %s, want at least 1s", delay)
 					}
 				}
 				if _, limited := drives.RateLimitRetryAfter(err); limited != (failure == "throttle") {
@@ -248,8 +248,12 @@ func TestStreamReadDeadlineStopsRequestAndRetry(t *testing.T) {
 			}
 			_, err := d.StreamURL(ctx, "file")
 			cancel()
-			if !errors.Is(err, context.DeadlineExceeded) || calls != 1 {
-				t.Fatalf("cached=%v backoff=%v calls=%d err=%v, want one timed-out attempt", cached, backoff, calls, err)
+			wantCalls := 1
+			if backoff {
+				wantCalls = 2
+			}
+			if !errors.Is(err, context.DeadlineExceeded) || calls != wantCalls {
+				t.Fatalf("cached=%v backoff=%v calls=%d err=%v, want %d calls before deadline", cached, backoff, calls, err, wantCalls)
 			}
 		}
 	}

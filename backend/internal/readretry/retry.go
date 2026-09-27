@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/rand/v2"
 	"net"
 	"syscall"
 	"time"
@@ -34,18 +33,20 @@ func Transient(err error) bool {
 		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE)
 }
 
-// Delay takes a one-based retry number: 1s then 3s, plus up to 25% jitter.
+// Delay takes a one-based retry number: retry immediately, then wait 1s.
 func Delay(retry int) time.Duration {
-	base := time.Second
-	if retry > 1 {
-		base = 3 * time.Second
+	if retry <= 1 {
+		return 0
 	}
-	return base + time.Duration(rand.Int64N(int64(base/4)))
+	return time.Second
 }
 
 func Wait(ctx context.Context, delay time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if delay <= 0 {
+		return nil
 	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()

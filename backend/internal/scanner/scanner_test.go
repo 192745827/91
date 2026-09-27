@@ -1157,7 +1157,7 @@ func TestScanRetriesDirectoryTimeoutThenProtectsFailedSubtree(t *testing.T) {
 	if drv.listCalls["timed-out-dir"] != readretry.MaxRetries+1 {
 		t.Fatalf("timeout list calls = %d, want %d", drv.listCalls["timed-out-dir"], readretry.MaxRetries+1)
 	}
-	if len(waits) != 2 || waits[0] < time.Second || waits[1] < 3*time.Second {
+	if len(waits) != 2 || waits[0] != 0 || waits[1] != time.Second {
 		t.Fatalf("retry delays = %v", waits)
 	}
 	if _, failed := result.Snapshot.FailedDirIDs["timed-out-dir"]; !failed {
@@ -1178,14 +1178,17 @@ func TestDiscoveryCancellationDuringTransportBackoff(t *testing.T) {
 	}
 	scan := New(nil, drv, []string{".mp4"}, nil, nil)
 	scan.RetryWait = func(ctx context.Context, delay time.Duration) error {
-		if delay < time.Second {
+		if delay == 0 {
+			return ctx.Err()
+		}
+		if delay != time.Second {
 			t.Errorf("backoff = %s", delay)
 		}
 		cancel()
 		return readretry.Wait(ctx, delay)
 	}
 	snapshot, _, err := scan.Discover(ctx, "")
-	if !errors.Is(err, context.Canceled) || drv.listCalls["broken"] != 1 {
+	if !errors.Is(err, context.Canceled) || drv.listCalls["broken"] != 2 {
 		t.Fatalf("calls=%d error=%v", drv.listCalls["broken"], err)
 	}
 	if len(snapshot.Issues) != 0 || len(snapshot.FailedDirIDs) != 0 {

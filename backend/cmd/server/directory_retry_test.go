@@ -106,12 +106,12 @@ func TestDirectoryBrowserRetriesReads(t *testing.T) {
 					t.Fatalf("calls=%d want %d", calls, wantCalls)
 				}
 				for i := 1; i < len(times); i++ {
-					minimum := time.Second
-					if i == 2 {
-						minimum = 3 * time.Second
+					delay := times[i].Sub(times[i-1])
+					if i == 1 && delay >= time.Second {
+						t.Errorf("first retry was not immediate: %s", delay)
 					}
-					if times[i].Sub(times[i-1]) < minimum {
-						t.Errorf("retry %d had no backoff", i)
+					if i == 2 && delay < time.Second {
+						t.Errorf("last retry waited %s, want at least 1s", delay)
 					}
 				}
 				stored, err := cat.GetDrive(context.Background(), "drive-id")

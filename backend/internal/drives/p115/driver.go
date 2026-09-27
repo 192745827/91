@@ -18,6 +18,7 @@ import (
 	sdk "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/video-site/backend/internal/applog"
 	"github.com/video-site/backend/internal/drives"
+	"github.com/video-site/backend/internal/readretry"
 	"github.com/video-site/backend/internal/scopedproxy"
 	"github.com/video-site/backend/internal/streamhttp"
 )
@@ -853,7 +854,11 @@ func (d *Driver) downloadInfo(ctx context.Context, pickCode string, ua string) (
 	if ua == "" {
 		ua = d.ua
 	}
-	info, err := d.newSDKReadClient(ctx).DownloadWithUA(pickCode, ua)
+	// This POST only resolves a download link, so transport failures can safely
+	// use the same read retry policy as metadata lookups.
+	info, err := readretry.Do(ctx, func() (*sdk.DownloadInfo, error) {
+		return d.newSDKClient(ctx).DownloadWithUA(pickCode, ua)
+	}, readretry.Options{})
 	if err != nil {
 		return nil, ua, err
 	}

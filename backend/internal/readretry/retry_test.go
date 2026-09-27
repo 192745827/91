@@ -51,12 +51,9 @@ func TestReadRetriesRecoverOrStopAtBudget(t *testing.T) {
 				return "value", nil
 			}, Options{Wait: func(ctx context.Context, delay time.Duration) error {
 				waits++
-				base := time.Second
-				if waits == 2 {
-					base = 3 * time.Second
-				}
-				if delay < base || delay >= base+base/4 {
-					t.Fatalf("retry %d delay = %s", waits, delay)
+				wantDelay := []time.Duration{0, time.Second}[waits-1]
+				if delay != wantDelay {
+					t.Fatalf("retry %d delay = %s, want %s", waits, delay, wantDelay)
 				}
 				return ctx.Err()
 			}})
@@ -75,7 +72,7 @@ func TestReadRetriesRecoverOrStopAtBudget(t *testing.T) {
 }
 
 func TestReadStopsOnPermanentErrorOrCancellation(t *testing.T) {
-	for _, mode := range []string{"permanent", "already canceled", "during request", "during backoff", "deadline"} {
+	for _, mode := range []string{"permanent", "already canceled", "during request", "before immediate retry", "during backoff", "deadline"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -98,8 +95,8 @@ func TestReadStopsOnPermanentErrorOrCancellation(t *testing.T) {
 					cancel()
 				}
 				return 0, io.EOF
-			}, Options{OnRetry: func(int, time.Duration, error) {
-				if mode == "during backoff" {
+			}, Options{OnRetry: func(_ int, delay time.Duration, _ error) {
+				if mode == "before immediate retry" || (mode == "during backoff" && delay > 0) {
 					cancel()
 				}
 			}})
@@ -113,6 +110,9 @@ func TestReadStopsOnPermanentErrorOrCancellation(t *testing.T) {
 			wantCalls := 1
 			if mode == "already canceled" {
 				wantCalls = 0
+			}
+			if mode == "during backoff" || mode == "deadline" {
+				wantCalls = 2
 			}
 			if calls != wantCalls || !errors.Is(err, want) {
 				t.Fatalf("calls=%d error=%v, want %d / %v", calls, err, wantCalls, want)

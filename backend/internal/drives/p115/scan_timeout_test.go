@@ -78,12 +78,9 @@ func TestScannerRetries115DirectoryTimeouts(t *testing.T) {
 				t.Fatalf("backoff waits = %d, want %d", len(waits), tt.wantCalls-1)
 			}
 			for i, delay := range waits {
-				base := time.Second
-				if i == 1 {
-					base = 3 * time.Second
-				}
-				if delay < base || delay >= base+base/4 {
-					t.Fatalf("retry %d delay = %s", i+1, delay)
+				wantDelay := []time.Duration{0, time.Second}[i]
+				if delay != wantDelay {
+					t.Fatalf("retry %d delay = %s, want %s", i+1, delay, wantDelay)
 				}
 			}
 			if err != nil {
