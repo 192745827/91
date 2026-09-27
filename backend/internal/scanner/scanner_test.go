@@ -1154,11 +1154,14 @@ func TestScanRetriesDirectoryTimeoutThenProtectsFailedSubtree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if drv.listCalls["timed-out-dir"] != readretry.MaxRetries+1 {
-		t.Fatalf("timeout list calls = %d, want %d", drv.listCalls["timed-out-dir"], readretry.MaxRetries+1)
+	if drv.listCalls["timed-out-dir"] != 2*(readretry.MaxRetries+1) {
+		t.Fatalf("timeout list calls = %d, want %d", drv.listCalls["timed-out-dir"], 2*(readretry.MaxRetries+1))
 	}
-	if len(waits) != 2 || waits[0] != 0 || waits[1] != time.Second {
+	if len(waits) != 4 || waits[0] != 0 || waits[1] != time.Second || waits[2] != 0 || waits[3] != time.Second {
 		t.Fatalf("retry delays = %v", waits)
+	}
+	if len(result.Issues) != 1 || result.Stats.Errors != 1 || result.Snapshot.PresenceAuthoritative() {
+		t.Fatalf("exhausted retry result = %+v", result)
 	}
 	if _, failed := result.Snapshot.FailedDirIDs["timed-out-dir"]; !failed {
 		t.Fatalf("failed dirs = %#v, want timed-out-dir", result.Snapshot.FailedDirIDs)

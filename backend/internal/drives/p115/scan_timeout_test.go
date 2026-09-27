@@ -22,7 +22,10 @@ func TestScannerRetries115DirectoryTimeouts(t *testing.T) {
 	}{
 		{name: "recovers after one timeout", timeouts: 1, wantCalls: 2},
 		{name: "recovers after two timeouts", timeouts: 2, wantCalls: 3},
-		{name: "exhausts retries", timeouts: 3, wantCalls: 3, wantFailed: true},
+		{name: "recovers in final pass", timeouts: 3, wantCalls: 4},
+		{name: "recovers after retry in final pass", timeouts: 4, wantCalls: 5},
+		{name: "recovers after last retry in final pass", timeouts: 5, wantCalls: 6},
+		{name: "exhausts both passes", timeouts: 6, wantCalls: 6, wantFailed: true},
 		{name: "canceled during retry", timeouts: 3, cancelAt: 2, wantCalls: 2},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -74,11 +77,15 @@ func TestScannerRetries115DirectoryTimeouts(t *testing.T) {
 				}
 				return
 			}
-			if len(waits) != tt.wantCalls-1 {
-				t.Fatalf("backoff waits = %d, want %d", len(waits), tt.wantCalls-1)
+			wantWaits := tt.wantCalls - 1
+			if tt.wantCalls > 3 {
+				wantWaits-- // Starting the final pass adds no backoff.
+			}
+			if len(waits) != wantWaits {
+				t.Fatalf("backoff waits = %d, want %d", len(waits), wantWaits)
 			}
 			for i, delay := range waits {
-				wantDelay := []time.Duration{0, time.Second}[i]
+				wantDelay := []time.Duration{0, time.Second}[i%2]
 				if delay != wantDelay {
 					t.Fatalf("retry %d delay = %s, want %s", i+1, delay, wantDelay)
 				}
