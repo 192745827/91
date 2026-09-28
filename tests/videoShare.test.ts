@@ -22,6 +22,10 @@ const sharePageSource = readFileSync(
   new URL("../src/pages/SharedVideoPage.tsx", import.meta.url),
   "utf8"
 );
+const footerSource = readFileSync(
+  new URL("../src/components/Footer.tsx", import.meta.url),
+  "utf8"
+);
 const shareStylesSource = readFileSync(
   new URL("../src/styles/video-detail.css", import.meta.url),
   "utf8"
@@ -116,19 +120,14 @@ test("share header logo aligns with the video content and clears the safe area",
   );
 });
 
-test("the share footer text links to the project repository", () => {
+test("the share page uses the shared footer with a project repository link", () => {
+  assert.match(sharePageSource, /import \{ Footer \} from "@\/components\/Footer"/);
+  assert.match(sharePageSource, /<Footer \/>/);
   assert.match(
-    sharePageSource,
+    footerSource,
     /href="https:\/\/github\.com\/nianzhibai\/91"[\s\S]*?>\s*© \{new Date\(\)\.getFullYear\(\)\} 91\s*<\/a>/
   );
-  assert.match(
-    shareStylesSource,
-    /\.share-page__footer a\s*\{[\s\S]*?display:\s*inline-block;/
-  );
-  assert.doesNotMatch(
-    shareStylesSource,
-    /\.share-page__footer a\s*\{[^}]*width:\s*100%;/
-  );
+  assert.doesNotMatch(shareStylesSource, /\.share-page__footer/);
 });
 
 test("share creation copies a newly generated one-time URL", () => {

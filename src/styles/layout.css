@@ -189,6 +189,8 @@
 }
 
 .listing-infinite-status--end {
+  min-height: 0;
+  padding-block: var(--space-2);
   color: var(--text-faint);
 }
 
@@ -360,9 +362,14 @@
  * ========================================================= */
 .footer {
   margin-top: var(--space-9);
-  padding: var(--space-6) 0;
+  padding: var(--space-5) 0;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
+}
+
+/* 列表结束提示和内容区已提供底部留白，页脚无需再叠加上边距。 */
+.app-shell__main:has(.listing-infinite-status--end) + .footer {
+  margin-top: 0;
 }
 
 .footer__inner {
@@ -834,7 +841,7 @@
 
   .footer {
     margin-top: var(--space-6);
-    padding: var(--space-5) 0;
+    padding: var(--space-4) 0;
   }
 
   .footer__inner {

@@ -3081,22 +3081,8 @@
   border-radius: var(--radius-md);
 }
 
-.share-page__footer {
-  padding: var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-  color: var(--text-faint);
-  font-size: var(--font-sm);
-  text-align: center;
-}
-
-.share-page__footer a {
-  display: inline-block;
-  color: inherit;
-  font-weight: var(--weight-semibold);
-}
-
-.share-page__footer a:hover {
-  color: var(--accent);
+.share-page .footer__inner {
+  justify-content: center;
 }
 
 @media (max-width: 640px) {
