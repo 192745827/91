@@ -3771,6 +3771,7 @@ func (c *Catalog) DeleteDrive(ctx context.Context, id string) error {
 		`DELETE FROM drive_scan_misses WHERE drive_id = ?`,
 		`DELETE FROM drive_skip_cleanup_legacy_dirs WHERE drive_id = ?`,
 		`DELETE FROM scans WHERE drive_id = ?`,
+		`DELETE FROM crawler_upload_results WHERE drive_id = ?`,
 		`DELETE FROM crawler_seen_sources WHERE drive_id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, query, id); err != nil {

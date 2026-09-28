@@ -1573,7 +1573,7 @@ func TestScheduleManualCrawlerUploadMigrationRunsWhenAssetsReady(t *testing.T) {
 	}
 }
 
-func TestScheduleManualCrawlerUploadMigrationRejectsPendingFingerprint(t *testing.T) {
+func TestScheduleManualCrawlerUploadMigrationAdmitsPendingFingerprintForPerVideoEvaluation(t *testing.T) {
 	ctx := context.Background()
 	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
 	if err != nil {
@@ -1612,17 +1612,21 @@ func TestScheduleManualCrawlerUploadMigrationRejectsPendingFingerprint(t *testin
 		t.Fatalf("seed video: %v", err)
 	}
 	migrator := &serverFakeCrawlerUploadRunner{}
-	app := &App{cat: cat, registry: proxy.NewRegistry(), crawlerUploader: migrator}
+	registry := proxy.NewRegistry()
+	registry.Set("crawler-pending", &serverFakeKindDrive{id: "crawler-pending", kind: scriptcrawler.Kind})
+	registry.Set("pikpak-target", &serverFakeKindDrive{id: "pikpak-target", kind: "pikpak"})
+	app := &App{cat: cat, registry: registry, crawlerUploader: migrator}
 
 	accepted, message := app.scheduleManualCrawlerUploadMigration(ctx, "crawler-pending")
-	if accepted {
-		t.Fatal("accepted = true, want false")
+	if !accepted {
+		t.Fatalf("pending assets rejected the entire upload: %s", message)
 	}
-	if !strings.Contains(message, "指纹") {
-		t.Fatalf("message = %q, want fingerprint reason", message)
+	deadline := time.Now().Add(time.Second)
+	for migrator.called.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
 	}
-	if migrator.called.Load() != 0 {
-		t.Fatalf("migration calls = %d, want 0", migrator.called.Load())
+	if migrator.called.Load() != 1 {
+		t.Fatal("upload worker was not invoked")
 	}
 }
 

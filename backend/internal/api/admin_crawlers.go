@@ -19,10 +19,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/video-site/backend/internal/applog"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/drives"
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 	"github.com/video-site/backend/internal/persistence"
+	"github.com/video-site/backend/internal/uploadjob"
 )
 
 type crawlerDTO struct {
@@ -57,6 +59,8 @@ type crawlerDTO struct {
 	TotalCrawledCount           int              `json:"totalCrawledCount"`
 	LocalVideoCount             int              `json:"localVideoCount"`
 	MigratedVideoCount          int              `json:"migratedVideoCount"`
+
+	LastUploadResult *uploadjob.Result `json:"lastUploadResult,omitempty"`
 }
 
 type upsertCrawlerReq struct {
@@ -85,6 +89,11 @@ func (a *AdminServer) handleListCrawlers(w http.ResponseWriter, r *http.Request)
 		generationStatuses = a.GetDriveGenerationStatuses()
 	}
 
+	uploadResults, err := a.Catalog.LatestCrawlerUploadResults(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	out := make([]crawlerDTO, 0, len(all))
 	for _, d := range all {
 		if d == nil || !isConfiguredCrawlerDrive(d) {
@@ -95,7 +104,11 @@ func (a *AdminServer) handleListCrawlers(w http.ResponseWriter, r *http.Request)
 			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		out = append(out, a.crawlerDTOForDrive(d, assets, generationStatuses[d.ID]))
+		item := a.crawlerDTOForDrive(d, assets, generationStatuses[d.ID])
+		if result, ok := uploadResults[d.ID]; ok {
+			item.LastUploadResult = &result
+		}
+		out = append(out, item)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -770,78 +783,38 @@ func (a *AdminServer) handleUploadCrawlerVideos(w http.ResponseWriter, r *http.R
 		http.Error(w, "crawler not found", http.StatusNotFound)
 		return
 	}
+	reject := func(reason string) {
+		applog.Warn(r.Context(), "手动上传未启动: "+reason, nil, applog.Fields{Component: "crawlerupload", DriveID: id, Stage: "admission"})
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "accepted": false, "message": reason})
+	}
 	status := a.nightlyJobStatus()
 	if status.Running || status.Queued {
-		writeJSON(w, http.StatusAccepted, map[string]any{
-			"ok":       true,
-			"accepted": false,
-			"message":  fullScanBusyMessage,
-			"status":   status,
-		})
+		reject(fullScanBusyMessage)
 		return
 	}
-
-	assets, err := a.Catalog.CountCrawlerAssets(r.Context(), d.ID, crawlerVideoIDPrefixes(d))
-	if err != nil {
-		writeErr(w, r, http.StatusInternalServerError, err)
+	if strings.TrimSpace(d.Credentials["upload_drive_id"]) == "" {
+		reject("请先配置上传网盘")
 		return
 	}
-	generation := DriveGenerationStatuses{}
-	if a.GetDriveGenerationStatuses != nil {
-		generation = a.GetDriveGenerationStatuses()[d.ID]
-	}
-	if reason := crawlerUploadBlockedReason(d, assets, generation, a.previewEnabled()); reason != "" {
-		writeJSON(w, http.StatusAccepted, map[string]any{
-			"ok":       true,
-			"accepted": false,
-			"message":  reason,
-		})
+	if a.GetDriveGenerationStatuses != nil && driveGenerationBusy(a.GetDriveGenerationStatuses()[d.ID]) {
+		reject("当前爬虫有正在进行的任务，请稍后重试")
 		return
 	}
-
-	accepted := true
-	message := ""
-	if a.OnCrawlerUploadRequested != nil {
-		accepted, message = a.OnCrawlerUploadRequested(id)
+	// Per-video eligibility belongs to the worker. A failed historical asset
+	// or one blocked local video must not reject the entire sweep.
+	if a.OnCrawlerUploadRequested == nil {
+		reject("上传服务未初始化")
+		return
 	}
-	resp := map[string]any{"ok": true, "accepted": accepted}
+	accepted, message := a.OnCrawlerUploadRequested(id)
 	if !accepted {
 		if strings.TrimSpace(message) == "" {
 			message = driveTaskBusyMessage
 		}
-		resp["message"] = message
+		reject(message)
+		return
 	}
-	writeJSON(w, http.StatusAccepted, resp)
-}
-
-func crawlerUploadBlockedReason(d *catalog.Drive, assets catalog.CrawlerAssetCounts, generation DriveGenerationStatuses, previewEnabled bool) string {
-	if d == nil || !isConfiguredCrawlerDrive(d) {
-		return "爬虫不存在"
-	}
-	if strings.TrimSpace(d.Credentials["upload_drive_id"]) == "" {
-		return "请先配置上传网盘"
-	}
-	if assets.Local <= 0 {
-		return "没有待上传的本地视频"
-	}
-	if driveGenerationBusy(generation) {
-		return "当前爬虫有正在进行的任务，请稍后重试"
-	}
-	if assets.Fingerprint.Pending > 0 {
-		return "还有待生成的视频指纹"
-	}
-	if assets.Fingerprint.Failed > 0 {
-		return "存在指纹生成失败的视频，请先重试或处理失败项"
-	}
-	if previewEnabled {
-		if assets.Teaser.Pending > 0 {
-			return "还有待生成的预览视频"
-		}
-		if assets.Teaser.Failed > 0 {
-			return "存在预览视频生成失败的视频，请先重试或处理失败项"
-		}
-	}
-	return ""
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "accepted": true})
 }
 
 func driveGenerationBusy(g DriveGenerationStatuses) bool {

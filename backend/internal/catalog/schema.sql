@@ -377,3 +377,7 @@ CREATE TABLE IF NOT EXISTS telegram_settings (
     api_hash TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS crawler_upload_results (
+  drive_id TEXT PRIMARY KEY,
+  result TEXT NOT NULL
+);

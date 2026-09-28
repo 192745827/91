@@ -650,6 +650,24 @@ export function stopDriveTasks(id: string) {
 
 // ---------- Crawlers ----------
 
+export type CrawlerUploadResult = {
+  taskId: string;
+  driveId: string;
+  targetDriveId: string;
+  state: "succeeded" | "partial" | "blocked" | "failed" | "canceled";
+  startedAt: string;
+  finishedAt: string;
+  candidateCount: number;
+  uploadedCount: number;
+  reusedCount: number;
+  blockedCount: number;
+  failedCount: number;
+  remainingCount: number;
+  issueCount: number;
+  message?: string;
+  issues?: Array<{ videoId?: string; title?: string; stage: string; reason: string; message: string }>;
+};
+
 export type AdminCrawler = {
   id: string;
   name: string;
@@ -669,6 +687,7 @@ export type AdminCrawler = {
   previewGenerationStatus?: DriveGenerationStatus;
   fingerprintGenerationStatus?: DriveGenerationStatus;
   uploadGenerationStatus?: DriveGenerationStatus;
+  lastUploadResult?: CrawlerUploadResult;
   thumbnailReadyCount: number;
   thumbnailPendingCount: number;
   thumbnailFailedCount: number;
